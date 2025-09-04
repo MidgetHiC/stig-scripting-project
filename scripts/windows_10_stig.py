@@ -1,7 +1,7 @@
 # add comments test
-import platform, os, psutil
+import platform, os, psutil, subprocess
 
-def format_drive(drive_letter: str):
+def format_drive(drive_letter):
     # look up what psutil.disk_partitions does
     for partition in psutil.disk_partitions(all=False):
         # look up what partion.mountpoint does
@@ -32,12 +32,37 @@ def format_drive(drive_letter: str):
 
                 return False
             
-    print(f"{drive_letter} is a NTFS drive", end="| ")
+    print(f"{drive_letter} is a NTFS drive")
     return True
 
-def encrypt_drive(drive: str, pin: str):
-    print(f"Beginning BitLocker encryption on {drive}", end="... ")
-    print(f"successfully encrypted {drive} with pin: {pin}", end="| ")  
+def enable_bitlocker(drive_letter, pin):
+    print(f"🔒 Beginning BitLocker encryption on {drive_letter}:...")
+    try:
+        enable_cmd = (
+            f"Enable-BitLocker -MountPoint '{drive_letter[:-1]}' -TpmProtector"
+        )
+        encryption_result = subprocess.run(
+            ["powershell", "-Command", enable_cmd],
+            capture_output = True,
+            text = True,
+            check = True
+        )
+
+        pin_protector_cmd = (
+            f"Add-BitLockerKeyProtector -MountPoint '{drive_letter[:-1]}' "
+            f"-Pin (ConvertTo-SecureString -String '{pin}' -AsPlainText -Force)"
+        )
+        protector_result = subprocess.run(
+            ["powershell", "-Command", pin_protector_cmd],
+            capture_output = True,
+            text = True,
+            check = True
+        )
+        print("🔐 BitLocker TPM + PIN protector added.")
+        print(f"✅ BitLocker enabled successfully on {drive_letter}.")
+    except subprocess.CalledProcessError as e:
+        print("❌ Failed to enable BitLocker.")
+        print("Error:", e.stderr)
 
 def win_10_stigs():
     # look up what platform.platform() does
@@ -56,8 +81,7 @@ def win_10_stigs():
         drives = os.listdrives()
         for i in range(1, len(drives) + 1):
             if (format_drive(drives[i - 1])):
-                encrypt_drive(drives[i - 1], pin)
-                print()
+                enable_bitlocker(drives[i - 1], pin)
     else:
         print("ERROR: NOT WINDOWS: Please run this script on a Windows machine.")
 
