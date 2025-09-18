@@ -1,5 +1,5 @@
 # add comments test
-import platform, os, psutil, subprocess
+import platform, os, psutil, subprocess, winreg
 
 def format_drive(drive_letter):
     # look up what psutil.disk_partitions does
@@ -39,26 +39,17 @@ def enable_bitlocker(drive_letter, pin):
     print(f"🔒 Beginning BitLocker encryption on {drive_letter}:...")
     try:
         enable_cmd = (
-            f"Enable-BitLocker -MountPoint '{drive_letter[:-1]}' -TpmProtector"
-        )
-        encryption_result = subprocess.run(
-            ["powershell", "-Command", enable_cmd],
-            capture_output = True,
-            text = True,
-            check = True
+            f"powershell.exe Enable-BitLocker -MountPoint '{drive_letter[:-1]}'"
         )
 
-        pin_protector_cmd = (
-            f"Add-BitLockerKeyProtector -MountPoint '{drive_letter[:-1]}' "
-            f"-Pin (ConvertTo-SecureString -String '{pin}' -AsPlainText -Force)"
-        )
-        protector_result = subprocess.run(
-            ["powershell", "-Command", pin_protector_cmd],
+        encryption_result = subprocess.run(
+            enable_cmd,
             capture_output = True,
             text = True,
-            check = True
+            check = True,
+            shell = True
         )
-        print("🔐 BitLocker TPM + PIN protector added.")
+
         print(f"✅ BitLocker enabled successfully on {drive_letter}.")
     except subprocess.CalledProcessError as e:
         print("❌ Failed to enable BitLocker.")
@@ -69,14 +60,6 @@ def win_10_stigs():
     print(f"Beginning Windows 10 STIG on {platform.system()}.")
     if platform.system() == 'Windows':
         print("Welcome to GTRI STIG Scripter.")
-
-        pin = ""
-        while (not pin.isdigit()) or len(str(pin)) < 6:
-            pin = input("Enter your pin (6 digit minimum): ")
-            if not pin.isdigit(): 
-                print(f"ERROR: INVALID PIN: Pin should only contain numbers, you typed {pin}. Try again.")
-            elif len(pin) < 6:
-                print(f"ERROR: INVALID PIN: Pin should be minimum 6 digits, you typed {pin}. Try again.")
 
         drives = os.listdrives()
         for i in range(1, len(drives) + 1):
