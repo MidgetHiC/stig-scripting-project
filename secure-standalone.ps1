@@ -123,10 +123,10 @@ if ($windows -eq $true) {
     netsh int tcp set global timestamps=disabled
 
     #Enable DEP
-    BCDEDIT /set "{current}" nx OptOut
     Set-Processmitigation -System -Enable DEP
     Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Explorer" -Name "NoDataExecutionPrevention" -Type "DWORD" -Value 0 -Force
     Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System" -Name "DisableHHDEP" -Type "DWORD" -Value 0 -Force
+    BCDEDIT /set "{current}" nx OptOut
 
     #Restrict anonymous shares
     Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" -Name "restrictanonymous" -Type "DWORD" -Value 1 -Force
@@ -223,7 +223,7 @@ if ($windows -eq $true) {
     Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\CloudContent\" -Name "DisableWindowsConsumerFeatures" -Type "DWORD" -Value 1 -Force
 
     #Prevent web publishing and online ordering wizards from downloading lists of providers
-    Set-ItemPropety -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name "NoWebServices" -Type "DWORD" -Value 1 -Force
+    Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name "NoWebServices" -Type "DWORD" -Value 1 -Force
 
     #Enable Windows Defender SmartScreen
     Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System" -Name "EnableSmartScreen" -Type "DWORD" -Value 1 -Force
