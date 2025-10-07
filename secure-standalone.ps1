@@ -1,13 +1,6 @@
-﻿
-param(
+﻿param(
     [Parameter(Mandatory = $false)]
-    [bool]$cleargpos = $true,
-    [Parameter(Mandatory = $false)]
-    [bool]$installupdates = $true,
-    [Parameter(Mandatory = $false)]
-    [bool]$windows = $true,
-    [Parameter(Mandatory = $false)]
-    [bool]$mitigations = $true
+    [bool]$windows = $true
 )
 
 ######SCRIPT FOR FULL INSTALL AND CONFIGURE ON STANDALONE MACHINE#####
@@ -20,48 +13,17 @@ $ErrorActionPreference = 'silentlycontinue'
 #Set Directory to PSScriptRoot
 if ((Get-Location).Path -NE $PSScriptRoot) { Set-Location $PSScriptRoot }
 
-$paramscheck = $cleargpos, $installupdates, $windows, $defender, $firewall, $mitigations, $nessusPID, $sosoptional
-
-# run a warning if no options are set to true
-if ($paramscheck | Where-Object { $_ -eq $false } | Select-Object -Count -EQ $params.Count) {
-    Write-Error "No Options Were Selected. Exiting..."
-    Exit
-}
-
-# if any parameters are set to true take a restore point
 $date = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
 $scriptName = $MyInvocation.MyCommand.Name
-if ($paramscheck | Where-Object { $_ } | Select-Object) {
-    $freespace = (Get-WmiObject -class Win32_LogicalDisk | Where-Object { $_.DeviceID -eq 'C:' }).FreeSpace
-    $minfreespace = 10000000000 #10GB
-    if ($freespace -gt $minfreespace) {
-        Write-Host "Taking a Restore Point Before Continuing...."
-        $job = Start-Job -Name "Take Restore Point" -ScriptBlock {
-            New-ItemProperty -Path 'HKLM:\Software\Microsoft\Windows NT\CurrentVersion\SystemRestore' -Name 'SystemRestorePointCreationFrequency' -PropertyType DWORD -Value 0 -Force
-            Checkpoint-Computer -Description "RestorePoint $scriptName $date" -RestorePointType "MODIFY_SETTINGS"
-        }
-        Wait-Job -Job $job
+$freespace = (Get-WmiObject -class Win32_LogicalDisk | Where-Object { $_.DeviceID -eq 'C:' }).FreeSpace
+$minfreespace = 10000000000 #10GB
+if ($freespace -gt $minfreespace) {
+    Write-Host "Taking a Restore Point Before Continuing...."
+    $job = Start-Job -Name "Take Restore Point" -ScriptBlock {
+        New-ItemProperty -Path 'HKLM:\Software\Microsoft\Windows NT\CurrentVersion\SystemRestore' -Name 'SystemRestorePointCreationFrequency' -PropertyType DWORD -Value 0 -Force
+        Checkpoint-Computer -Description "RestorePoint $scriptName $date" -RestorePointType "MODIFY_SETTINGS"
     }
-    else {
-        Write-Output "Not enough disk space to create a restore point. Current free space: $(($freespace/1GB)) GB"
-    }
-}
-
-# Install Local Group Policy if Not Already Installed
-if ($paramscheck | Where-Object { $_ } | Select-Object) {
-    Start-Job -Name InstallGPOPackages -ScriptBlock {
-        foreach ($F in (Get-ChildItem "$env:SystemRoot\servicing\Packages\Microsoft-Windows-GroupPolicy-ClientTools-Package~*.mum").FullName) {
-            if ((dism /online /get-packages | where-object { $_.name -like "*Microsoft-Windows-GroupPolicy-ClientTools*" }).count -eq 0) {
-                dism /Online /NoRestart /Add-Package:$F
-            }
-        }
-
-        foreach ($F in (Get-ChildItem "$env:SystemRoot\servicing\Packages\Microsoft-Windows-GroupPolicy-ClientExtensions-Package~*.mum").FullName) {
-            if ((dism /online /get-packages | where-object { $_.name -like "*Microsoft-Windows-GroupPolicy-ClientExtensions*" }).count -eq 0) {
-                dism /Online /NoRestart /Add-Package:$F
-            }
-        }
-    }
+    Wait-Job -Job $job
 }
 
 #GPO Configurations
@@ -76,38 +38,16 @@ function Import-GPOs([string]$gposdir) {
     }
 }
 
-if ($cleargpos -eq $true) {
-    Write-Host "Removing Existing Local GPOs" -ForegroundColor Green
-    #Remove and Refresh Local Policies
-    Remove-Item -Recurse -Force "$env:WinDir\System32\GroupPolicy" | Out-Null
-    Remove-Item -Recurse -Force "$env:WinDir\System32\GroupPolicyUsers" | Out-Null
-    secedit /configure /cfg "$env:WinDir\inf\defltbase.inf" /db defltbase.sdb /verbose | Out-Null
-    gpupdate /force | Out-Null
-}
-else {
-    Write-Output "The Clear Existing GPOs Section Was Skipped..."
-}
+Write-Host "Removing Existing Local GPOs" -ForegroundColor Green
+#Remove and Refresh Local Policies
+Remove-Item -Recurse -Force "$env:WinDir\System32\GroupPolicy" | Out-Null
+Remove-Item -Recurse -Force "$env:WinDir\System32\GroupPolicyUsers" | Out-Null
+secedit /configure /cfg "$env:WinDir\inf\defltbase.inf" /db defltbase.sdb /verbose | Out-Null
+gpupdate /force | Out-Null
 
-if ($installupdates -eq $true) {
-    Write-Host "Installing the Latest Windows Updates" -ForegroundColor Green
-    #Install PowerShell Modules
-    Copy-Item -Path .\Files\"PowerShell Modules"\* -Destination C:\Windows\System32\WindowsPowerShell\v1.0\Modules -Force -Recurse
-    #Unblock New PowerShell Modules
-    Get-ChildItem C:\Windows\System32\WindowsPowerShell\v1.0\Modules\PSWindowsUpdate\ -recurse | Unblock-File
-    #Install PSWindowsUpdate
-    Import-Module -Name PSWindowsUpdate -Force -Global 
 
-    #Install Latest Windows Updates
-    Start-Job -Name "Windows Updates" -ScriptBlock {
-        Install-WindowsUpdate -MicrosoftUpdate -AcceptAll; Get-WuInstall -AcceptAll -IgnoreReboot; Get-WuInstall -AcceptAll -Install -IgnoreReboot
-    }
-}
-else {
-    Write-Output "The Install Update Section Was Skipped..."
-}
-
+Write-Host "Implementing the Windows 10/11 STIGs" -ForegroundColor Green
 if ($windows -eq $true) {
-    Write-Host "Implementing the Windows 10/11 STIGs" -ForegroundColor Green
     Import-GPOs -gposdir ".\Files\GPOs\DoD\Windows"
 
     Write-Host "Implementing simeononsecurity/Windows-Audit-Policy" -ForegroundColor Green
@@ -166,110 +106,184 @@ if ($windows -eq $true) {
     #The use of a hardware security device with Windows Hello for Business must be enabled.
     New-Item -Path "HKLM:\SOFTWARE\Policies\Microsoft" -Name "PassportForWork" -Force
     Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\PassportForWork\" -Name "RequireSecurityDevice" -Type "DWORD" -Value 1 -Force
-}
-else {
-    Write-Output "The Windows Desktop Section Was Skipped..."
-}
 
-if ($mitigations -eq $true) {
     Write-Host "Implementing the General Vulnerability Mitigations" -ForegroundColor Green
-    Start-Job -Name "Mitigations" -ScriptBlock {
-        #####SPECTURE MELTDOWN#####
-        #https://support.microsoft.com/en-us/help/4073119/protect-against-speculative-execution-side-channel-vulnerabilities-in
-        Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" -Name FeatureSettingsOverride -Type "DWORD" -Value 72 -Force
-        Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" -Name FeatureSettingsOverrideMask -Type "DWORD" -Value 3 -Force
-        Set-ItemProperty -Path "HKLM:\Software\Microsoft\Windows NT\CurrentVersion\Virtualization" -Name MinVmVersionForCpuBasedMitigations -Type "String" -Value "1.0" -Force
-    
-        #Disable LLMNR
-        #https://www.blackhillsinfosec.com/how-to-disable-llmnr-why-you-want-to/
-        New-Item -Path "HKLM:\Software\policies\Microsoft\Windows NT\" -Name "DNSClient" -Force
-        Set-ItemProperty -Path "HKLM:\Software\policies\Microsoft\Windows NT\DNSClient" -Name "EnableMulticast" -Type "DWORD" -Value 0 -Force
-    
-        #Disable TCP Timestamps
-        netsh int tcp set global timestamps=disabled
-    
-        #Enable DEP
-        BCDEDIT /set "{current}" nx OptOut
-        Set-Processmitigation -System -Enable DEP
-        Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Explorer" -Name "NoDataExecutionPrevention" -Type "DWORD" -Value 0 -Force
-        Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System" -Name "DisableHHDEP" -Type "DWORD" -Value 0 -Force
-    
-        #Restrict anonymous shares
-        Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" -Name "restrictanonymous" -Type "DWORD" -Value 1 -Force
+    #####SPECTURE MELTDOWN#####
+    #https://support.microsoft.com/en-us/help/4073119/protect-against-speculative-execution-side-channel-vulnerabilities-in
+    Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" -Name FeatureSettingsOverride -Type "DWORD" -Value 72 -Force
+    Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" -Name FeatureSettingsOverrideMask -Type "DWORD" -Value 3 -Force
+    Set-ItemProperty -Path "HKLM:\Software\Microsoft\Windows NT\CurrentVersion\Virtualization" -Name MinVmVersionForCpuBasedMitigations -Type "String" -Value "1.0" -Force
 
-        #Set LanMan auth level to send NTLMv2 response only, refuse LM and NTLM
-        Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" -Name "LmCompatibilityLevel" -Type "DWORD" -Value 5 -Force
+    #Disable LLMNR
+    #https://www.blackhillsinfosec.com/how-to-disable-llmnr-why-you-want-to/
+    New-Item -Path "HKLM:\Software\policies\Microsoft\Windows NT\" -Name "DNSClient" -Force
+    Set-ItemProperty -Path "HKLM:\Software\policies\Microsoft\Windows NT\DNSClient" -Name "EnableMulticast" -Type "DWORD" -Value 0 -Force
 
-        #Configure all local user passwords to expire
-        $users = Get-LocalUser
-        foreach ($user in $users) {
-            Set-LocalUser -Name $user.Name -PasswordNeverExpires $false
-        }
+    #Disable TCP Timestamps
+    netsh int tcp set global timestamps=disabled
 
-        #Prevent autorun commands
-        New-Item -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name "NoAutorun" -Force
-        Set-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name "NoAutorun" -Type "DWORD" -Value 1 -Force
+    #Enable DEP
+    BCDEDIT /set "{current}" nx OptOut
+    Set-Processmitigation -System -Enable DEP
+    Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Explorer" -Name "NoDataExecutionPrevention" -Type "DWORD" -Value 0 -Force
+    Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System" -Name "DisableHHDEP" -Type "DWORD" -Value 0 -Force
 
-        #Disable autoplay for all drives
-        New-Item -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name "NoDriveTypeAutoRun" -Force
-        Set-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name "NoDriveTypeAutoRun" -Type "DWORD" -Value 255 -Force
+    #Restrict anonymous shares
+    Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" -Name "restrictanonymous" -Type "DWORD" -Value 1 -Force
 
-        #Disable PowerShell 2.0
-        Disable-WindowsOptionalFeature -Online -FeatureName MicrosoftWindowsPowerShellV2Root 
+    #Set LanMan auth level to send NTLMv2 response only, refuse LM and NTLM
+    Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" -Name "LmCompatibilityLevel" -Type "DWORD" -Value 5 -Force
 
-        #Enable SEHOP
-        Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\kernel" -Name "DisableExceptionChainValidation" -Type "DWORD" -Value 0 -Force
-    
-        #Disable NetBIOS by updating Registry
-        #http://blog.dbsnet.fr/disable-netbios-with-powershell#:~:text=Disabling%20NetBIOS%20over%20TCP%2FIP,connection%2C%20then%20set%20NetbiosOptions%20%3D%202
-        $key = "HKLM:SYSTEM\CurrentControlSet\services\NetBT\Parameters\Interfaces"
-        Get-ChildItem $key | ForEach-Object { 
-            Write-Host("Modify $key\$($_.pschildname)")
-            $NetbiosOptions_Value = (Get-ItemProperty "$key\$($_.pschildname)").NetbiosOptions
-            Write-Host("NetbiosOptions updated value is $NetbiosOptions_Value")
-        }
-        
-        #Disable WPAD
-        #https://adsecurity.org/?p=3299
-        New-Item -Path "HKLM:\Software\Microsoft\Windows\CurrentVersion\Internet Settings\" -Name "Wpad" -Force
-        New-Item -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings\Wpad" -Name "Wpad" -Force
-        Set-ItemProperty -Path "HKLM:\Software\Microsoft\Windows\CurrentVersion\Internet Settings\Wpad" -Name "WpadOverride" -Type "DWORD" -Value 1 -Force
-        Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings\Wpad" -Name "WpadOverride" -Type "DWORD" -Value 1 -Force
-    
-        #Enable LSA Protection/Auditing
-        #https://adsecurity.org/?p=3299
-        New-Item -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\" -Name "LSASS.exe" -Force
-        Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\LSASS.exe" -Name "AuditLevel" -Type "DWORD" -Value 8 -Force
-    
-        #Disable Windows Script Host
-        #https://adsecurity.org/?p=3299
-        New-Item -Path "HKLM:\SOFTWARE\Microsoft\Windows Script Host\" -Name "Settings" -Force
-        Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows Script Host\Settings" -Name "Enabled" -Type "DWORD" -Value 0 -Force
-        
-        #Disable WDigest
-        #https://adsecurity.org/?p=3299
-        Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\SecurityProviders\Wdigest" -Name "UseLogonCredential" -Type "DWORD" -Value 0 -Force
-    
-        #Block Untrusted Fonts
-        #https://adsecurity.org/?p=3299
-        Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Kernel\" -Name "MitigationOptions" -Type "QWORD" -Value "1000000000000" -Force
-        
-        #Disable Office OLE
-        #https://adsecurity.org/?p=3299
-        $officeversions = '16.0', '15.0', '14.0', '12.0'
-        ForEach ($officeversion in $officeversions) {
-            New-Item -Path "HKLM:\SOFTWARE\Microsoft\Office\$officeversion\Outlook\" -Name "Security" -Force
-            New-Item -Path "HKCU:\SOFTWARE\Microsoft\Office\$officeversion\Outlook\" -Name "Security" -Force
-            Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Office\$officeversion\Outlook\Security\" -Name "ShowOLEPackageObj" -Type "DWORD" -Value "0" -Force
-            Set-ItemProperty -Path "HKCU:\SOFTWARE\Microsoft\Office\$officeversion\Outlook\Security\" -Name "ShowOLEPackageObj" -Type "DWORD" -Value "0" -Force
-        }
-    
-        #Disable Hibernate
-        powercfg -h off
+    #Configure all local user passwords to expire
+    $users = Get-LocalUser
+    foreach ($user in $users) {
+    Set-LocalUser -Name $user.Name -PasswordNeverExpires $false
     }
-}
-else {
-    Write-Output "The General Mitigations Section Was Skipped..."
+
+    #Prevent autorun commands
+    New-Item -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name "NoAutorun" -Force
+    Set-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name "NoAutorun" -Type "DWORD" -Value 1 -Force
+
+    #Disable autoplay for all drives
+    New-Item -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name "NoDriveTypeAutoRun" -Force
+    Set-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name "NoDriveTypeAutoRun" -Type "DWORD" -Value 255 -Force
+
+    #Disable PowerShell 2.0
+    Disable-WindowsOptionalFeature -Online -FeatureName MicrosoftWindowsPowerShellV2Root 
+
+    #Disable Secondary Logon service
+    Set-Service -Name "seclogon" -StartupType Disabled
+
+    #Set account lockout duration to 15 minutes or greater
+    net accounts /lockoutthreshold:3
+    net accounts /lockoutduration:15
+    net accounts /lockoutwindow:15
+
+    #Enforce passowrd history to 24 passwords remembered
+    net accounts /uniquepw:24
+
+    #Set minimum password age to at least 1 day
+    net accounts /minpwage:1
+
+    #Set minimum password length to 14 characters
+    net accounts /minpwlen:14
+
+    #Set password complexity filter to Enabled\
+    #haven't fixed yet
+
+    #Enable Logon/Logoff Auditing
+    auditpol /set /subcategory:"Account Lockout" /failure:enable
+
+    #Enable audit of Object "Access File Share" failures
+    auditpol /set /subcategory:"File Share" /failure:enable
+
+    #Enable audit of Object "Access File Share" successes
+    auditpol /set /subcategory:"File Share" /success:enable
+
+    #Enable audit of Object Access "Other Object Access Events" successes 
+    auditpol /set /subcategory:"Other Object Access Events" /success:enable
+
+    #Enable audit of Object Access "Other Object Access Events" failures
+    auditpol /set /subcategory:"Other Object Access Events" /failure:enable
+
+    #Enable audit of Policy Change "Authorization Policy Change" successes
+    auditpol /set /subcategory:"Authorization Policy Change" /success:enable
+
+    #Enable audit of System "Other System Events" successes
+    auditpol /set /subcategory:"Other System Events" /success:enable
+
+    #Enable audit of System "Other System Events" failures
+    auditpol /set /subcategory:"Other System Events" /failure:enable
+
+    #Set security event log size to 1024000 KB or greater
+    Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\EventLog\Security" -Name "MaxSize" -Type "DWORD" -Value 1024000 -Force
+
+    #Enable audit of Policy Change "Audit Other Policy Change Events" failures 
+    auditpol /set /subcategory:"Other Policy Change Events" /failure:enable
+
+    #Enable audit of Logon/Logoff "Other Logon\Logoff Events" successes
+    auditpol /set /subcategory:"Other Logon/Logoff Events" /success:enable
+
+    #Enable audit of Logon/Logoff "Other Logon\Logoff Events" failures
+    auditpol /set /subcategory:"Other Logon/Logoff Events" /failure:enable
+
+    #Enable audit of Object Access "Audit Detailed File Share" failures
+    auditpol /set /subcategory:"Detailed File Share" /failure:enable
+
+    #Enable audit of Policy Change "Audit MPSSVC Rule-Level Policy Change" successes
+    auditpol /set /subcategory:"MPSSVC Rule-Level Policy Change" /success:enable
+
+    #Enable audit of Policy Change "Audit MPSSVC Rule-Level Policy Change" failures
+    auditpol /set /subcategory:"MPSSVC Rule-Level Policy Change" /failure:enable
+
+    #Limit simultaneous connection to the internet
+    Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WcmSvc\GroupPolicy" -Name "fMinimizeConnections" -Type "DWORD" -Value 3 -Force
+
+    #Turn off Microsoft consumer experiences
+    Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\CloudContent\" -Name "DisableWindowsConsumerFeatures" -Type "DWORD" -Value 1 -Force
+
+    #Prevent web publishing and online ordering wizards from downloading lists of providers
+    Set-ItemPropety -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name "NoWebServices" -Type "DWORD" -Value 1 -Force
+
+    #Enable Windows Defender SmartScreen
+    Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System" -Name "EnableSmartScreen" -Type "DWORD" -Value 1 -Force
+
+    #Set Windows 10 minimum pin length to 6 or more
+    New-Item -Path "HKLM:\SOFTWARE\Policies\Microsoft\PassportForWork" -Name "PINComplexity"
+    Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\PassportForWork\PINComplexity" -Name "MinimumPINLength" -Type "DWORD" -Value 6 -Force
+
+    #Disable RSS feed attachment downloads
+    Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Internet Explorer\Feeds" -Name "DisableEnclosureDownload" -Type "DWORD" -Value 1 -Force
+
+    #Enable SEHOP
+    Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\kernel" -Name "DisableExceptionChainValidation" -Type "DWORD" -Value 0 -Force
+
+    #Disable NetBIOS by updating Registry
+    #http://blog.dbsnet.fr/disable-netbios-with-powershell#:~:text=Disabling%20NetBIOS%20over%20TCP%2FIP,connection%2C%20then%20set%20NetbiosOptions%20%3D%202
+    $key = "HKLM:SYSTEM\CurrentControlSet\services\NetBT\Parameters\Interfaces"
+    Get-ChildItem $key | ForEach-Object { 
+    Write-Host("Modify $key\$($_.pschildname)")
+    $NetbiosOptions_Value = (Get-ItemProperty "$key\$($_.pschildname)").NetbiosOptions
+    Write-Host("NetbiosOptions updated value is $NetbiosOptions_Value")
+    }
+
+    #Disable WPAD
+    #https://adsecurity.org/?p=3299
+    New-Item -Path "HKLM:\Software\Microsoft\Windows\CurrentVersion\Internet Settings\" -Name "Wpad" -Force
+    New-Item -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings\Wpad" -Name "Wpad" -Force
+    Set-ItemProperty -Path "HKLM:\Software\Microsoft\Windows\CurrentVersion\Internet Settings\Wpad" -Name "WpadOverride" -Type "DWORD" -Value 1 -Force
+    Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings\Wpad" -Name "WpadOverride" -Type "DWORD" -Value 1 -Force
+
+    #Enable LSA Protection/Auditing
+    #https://adsecurity.org/?p=3299
+    New-Item -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\" -Name "LSASS.exe" -Force
+    Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\LSASS.exe" -Name "AuditLevel" -Type "DWORD" -Value 8 -Force
+
+    #Disable Windows Script Host
+    #https://adsecurity.org/?p=3299
+    New-Item -Path "HKLM:\SOFTWARE\Microsoft\Windows Script Host\" -Name "Settings" -Force
+    Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows Script Host\Settings" -Name "Enabled" -Type "DWORD" -Value 0 -Force
+
+    #Disable WDigest
+    #https://adsecurity.org/?p=3299
+    Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\SecurityProviders\Wdigest" -Name "UseLogonCredential" -Type "DWORD" -Value 0 -Force
+
+    #Block Untrusted Fonts
+    #https://adsecurity.org/?p=3299
+    Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Kernel\" -Name "MitigationOptions" -Type "QWORD" -Value "1000000000000" -Force
+
+    #Disable Office OLE
+    #https://adsecurity.org/?p=3299
+    $officeversions = '16.0', '15.0', '14.0', '12.0'
+    ForEach ($officeversion in $officeversions) {
+    New-Item -Path "HKLM:\SOFTWARE\Microsoft\Office\$officeversion\Outlook\" -Name "Security" -Force
+    New-Item -Path "HKCU:\SOFTWARE\Microsoft\Office\$officeversion\Outlook\" -Name "Security" -Force
+    Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Office\$officeversion\Outlook\Security\" -Name "ShowOLEPackageObj" -Type "DWORD" -Value "0" -Force
+    Set-ItemProperty -Path "HKCU:\SOFTWARE\Microsoft\Office\$officeversion\Outlook\Security\" -Name "ShowOLEPackageObj" -Type "DWORD" -Value "0" -Force
+    }
+
+    #Disable Hibernate
+    powercfg -h off
 }
 
 Write-Host "Checking Backgrounded Processes"; Get-Job
@@ -278,7 +292,7 @@ Write-Host "Performing Group Policy Update"
 $timeoutSeconds = 180
 $gpupdateJob = Start-Job -ScriptBlock { Gpupdate /force }
 $gpupdateResult = Receive-Job -Job $gpupdateJob -Wait -Timeout $timeoutSeconds
-if ($gpupdateResult -eq $null) {
+if ($null -eq $gpupdateResult) {
     Write-Host "Group Policy Update timed out after $timeoutSeconds seconds."
 } else {
     Write-Host "Group Policy Update completed."
