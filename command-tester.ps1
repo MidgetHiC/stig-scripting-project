@@ -1,34 +1,14 @@
-$infPath = "$env:TEMP\password_policy.inf"
-$dbPath = "$env:TEMP\$(Get-Random).sdb"
-if (Test-Path $dbPath) { Remove-Item $dbPath -Force }
+#Disable PowerShell 2.0
+Disable-WindowsOptionalFeature -Online -FeatureName MicrosoftWindowsPowerShellV2Root -Remove -NoRestart
+if ((Get-WindowsOptionalFeature -Online -FeatureName MicrosoftWindowsPowerShellV2Root).State -eq "Disabled" -or (Get-WindowsOptionalFeature -Online -FeatureName MicrosoftWindowsPowerShellV2Root).State -eq "Absent") {
+    Write-Host "PASSED"
+} Else {
+    Write-Host "FAILED"
+}
 
-$infContent = @'
-[Unicode]
-Unicode=yes
-[Version]
-signature="$CHICAGO$"
-Revision=1
-[System Access]
-PasswordComplexity = 1
-'@ | Out-File -FilePath $infPath -Encoding Unicode
-
-secedit /validate $infPath /quiet
-cmd /c "secedit /configure /db $dbPath /cfg $infPath /verbose"
-gpupdate /force
-
-$infPath = "$env:TEMP\secpol_modified.inf"
-$dbPath = "$env:TEMP\$(Get-Random).sdb"
-if (Test-Path $dbPath) { Remove-Item $dbPath -Force }
-
-$infContent = @'
-[Unicode]
-Unicode=yes
-[Version]
-signature="$CHICAGO$"
-Revision=1
-[Privilege Rights]
-SeNetworkLogonRight = Administrators,Remote Desktop Users
-'@ | Out-File -FilePath $infPath -Encoding Unicode
-
-secedit /validate $infPath /quiet
-cmd /c "secedit /configure /db $dbPath /cfg $infPath /verbose"
+Disable-WindowsOptionalFeature -Online -FeatureName MicrosoftWindowsPowerShellV2 -Remove -NoRestart
+if ((Get-WindowsOptionalFeature -Online -FeatureName MicrosoftWindowsPowerShellV2).State -eq "Disabled" -or (Get-WindowsOptionalFeature -Online -FeatureName MicrosoftWindowsPowerShellV2).State -eq "Absent") {
+    Write-Host "PASSED"
+} Else {
+    Write-Host "FAILED"
+}
