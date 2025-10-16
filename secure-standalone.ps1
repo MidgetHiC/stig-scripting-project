@@ -68,6 +68,11 @@ if ($windows -eq $true) {
     New-Item -Force -ItemType "Directory" "C:\temp"
     Copy-Item $PSScriptRoot\files\auditing\auditbaseline.csv C:\temp\auditbaseline.csv 
 
+    #Import SecurityPolicy Module
+    Copy-Item -Path ".\Files\SecurityPolicy" -Destination "C:\Program Files\WindowsPowerShell\Modules\SecurityPolicy" -Recurse
+    Get-ChildItem "C:\Program Files\WindowsPowerShell\Modules\SecurityPolicy" -Recurse | Unblock-File
+    Import-Module SecurityPolicy
+
     #Clear Audit Policy
     auditpol /clear /y
 
@@ -160,19 +165,10 @@ if ($windows -eq $true) {
     New-Item -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name "NoDriveTypeAutoRun" -Force
     Set-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer" -Name "NoDriveTypeAutoRun" -Type "DWORD" -Value 255 -Force
 
-    #Disable PowerShell 2.0
-    Disable-WindowsOptionalFeature -Online -FeatureName MicrosoftWindowsPowerShellV2Root -Remove -NoRestart
-    if ((Get-WindowsOptionalFeature -Online -FeatureName MicrosoftWindowsPowerShellV2Root).State -eq "Disabled" -or (Get-WindowsOptionalFeature -Online -FeatureName MicrosoftWindowsPowerShellV2Root).State -eq "Absent") {
-        Write-Host "PASSED"
-    } Else {
-        Write-Host "FAILED"
-    }
-
-    Disable-WindowsOptionalFeature -Online -FeatureName MicrosoftWindowsPowerShellV2 -Remove -NoRestart
-    if ((Get-WindowsOptionalFeature -Online -FeatureName MicrosoftWindowsPowerShellV2).State -eq "Disabled" -or (Get-WindowsOptionalFeature -Online -FeatureName MicrosoftWindowsPowerShellV2).State -eq "Absent") {
-        Write-Host "PASSED"
-    } Else {
-        Write-Host "FAILED"
+    if ($WinVer -Match "Windows 10") {
+        #Disable PowerShell 2.0
+        Disable-WindowsOptionalFeature -Online -FeatureName MicrosoftWindowsPowerShellV2Root -Remove -NoRestart
+        Disable-WindowsOptionalFeature -Online -FeatureName MicrosoftWindowsPowerShellV2 -Remove -NoRestart
     }
 
     #Disable Secondary Logon service
@@ -192,7 +188,7 @@ if ($windows -eq $true) {
     #Set minimum password length to 14 characters
     net accounts /minpwlen:14
 
-    <#Set password complexity filter to Enabled
+    #Set password complexity filter to Enabled
     $infPath = "$env:TEMP\password_policy.inf"
     $dbPath = "$env:TEMP\$(Get-Random).sdb"
     if (Test-Path $dbPath) { Remove-Item $dbPath -Force }
@@ -204,11 +200,12 @@ Unicode=yes
 signature="$CHICAGO$"
 Revision=1
 [System Access]
+MinimumPasswordLength = 14
 PasswordComplexity = 1
 '@ | Out-File -FilePath $infPath -Encoding Unicode
 
     secedit /validate $infPath
-    cmd /c "secedit /configure /db $dbPath /cfg $infPath /verbose"#>
+    & ".\Files\LGPO\LGPO.exe" /u $infPath <#cmd /c "secedit /configure /db $dbPath /cfg $infPath /verbose"#>
 
     #Enable Logon/Logoff Auditing
     auditpol /set /subcategory:"Account Lockout" /failure:enable
@@ -329,7 +326,7 @@ PasswordComplexity = 1
     #Deny user account control elevation requests for standard users
     Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "ConsentPromptBehaviorUser" -Type "DWORD" -Value 0 -Force
 
-    <#Disable network access unless admin or remote desktop user
+    #Disable network access unless admin or remote desktop user
     $infPath = "$env:TEMP\secpol_modified.inf"
     $dbPath = "$env:TEMP\$(Get-Random).sdb"
     if (Test-Path $dbPath) { Remove-Item $dbPath -Force }
@@ -345,18 +342,14 @@ SeNetworkLogonRight = Administrators,Remote Desktop Users
 '@ | Out-File -FilePath $infPath -Encoding Unicode
 
     secedit /validate $infPath
-    cmd /c "secedit /configure /db $dbPath /cfg $infPath /verbose"#>
+    cmd /c "secedit /configure /db $dbPath /cfg $infPath /verbose"<##>
 
     #Disable Internet Explorer
     New-Item -Path "HKLM:\SOFTWARE\Microsoft\Internet Explorer" -Name "Main" -Force
     Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Internet Explorer\Main" -Name "NotifyDisableIEOptions" -Type "DWORD" -Value 0
     Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion" -Name "EditionId" -Type String -Value "EnterpriseS" -Force
-    Disable-WindowsOptionalFeature -Online -FeatureName "Internet-Explorer-Optional-amd64" -Remove -NoRestart
-
-    if ((Get-WindowsOptionalFeature -Online -FeatureName "Internet-Explorer-Optional-amd64").State -eq "Disabled" -or (Get-WindowsOptionalFeature -Online -FeatureName "Internet-Explorer-Optional-amd64").State -eq "Absent") {
-        Write-Host "PASSED"
-    } Else {
-        Write-Host "FAILED"
+    if ($WinVer -Match "Windows 10") {
+        Disable-WindowsOptionalFeature -Online -FeatureName "Internet-Explorer-Optional-amd64" -Remove -NoRestart
     }
 
     #Update and configure .NET framework to support TLS
