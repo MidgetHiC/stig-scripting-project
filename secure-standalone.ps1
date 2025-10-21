@@ -188,25 +188,6 @@ if ($windows -eq $true) {
     #Set minimum password length to 14 characters
     net accounts /minpwlen:14
 
-    #Set password complexity filter to Enabled
-    $infPath = "$env:TEMP\password_policy.inf"
-    $dbPath = "$env:TEMP\$(Get-Random).sdb"
-    if (Test-Path $dbPath) { Remove-Item $dbPath -Force }
-
-    $infContent = @'
-[Unicode]
-Unicode=yes
-[Version]
-signature="$CHICAGO$"
-Revision=1
-[System Access]
-MinimumPasswordLength = 14
-PasswordComplexity = 1
-'@ | Out-File -FilePath $infPath -Encoding Unicode
-
-    secedit /validate $infPath
-    & ".\Files\LGPO\LGPO.exe" /u $infPath <#cmd /c "secedit /configure /db $dbPath /cfg $infPath /verbose"#>
-
     #Enable Logon/Logoff Auditing
     auditpol /set /subcategory:"Account Lockout" /failure:enable
 
@@ -326,32 +307,6 @@ PasswordComplexity = 1
     #Deny user account control elevation requests for standard users
     Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "ConsentPromptBehaviorUser" -Type "DWORD" -Value 0 -Force
 
-    #Disable network access unless admin or remote desktop user
-    $infPath = "$env:TEMP\secpol_modified.inf"
-    $dbPath = "$env:TEMP\$(Get-Random).sdb"
-    if (Test-Path $dbPath) { Remove-Item $dbPath -Force }
-
-    $infContent = @'
-[Unicode]
-Unicode=yes
-[Version]
-signature="$CHICAGO$"
-Revision=1
-[Privilege Rights]
-SeNetworkLogonRight = Administrators,Remote Desktop Users
-'@ | Out-File -FilePath $infPath -Encoding Unicode
-
-    secedit /validate $infPath
-    cmd /c "secedit /configure /db $dbPath /cfg $infPath /verbose"<##>
-
-    #Disable Internet Explorer
-    New-Item -Path "HKLM:\SOFTWARE\Microsoft\Internet Explorer" -Name "Main" -Force
-    Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Internet Explorer\Main" -Name "NotifyDisableIEOptions" -Type "DWORD" -Value 0
-    Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion" -Name "EditionId" -Type String -Value "EnterpriseS" -Force
-    if ($WinVer -Match "Windows 10") {
-        Disable-WindowsOptionalFeature -Online -FeatureName "Internet-Explorer-Optional-amd64" -Remove -NoRestart
-    }
-
     #Update and configure .NET framework to support TLS
     Set-ItemProperty -Path "HKLM:\SOFTWARE\WOW6432Node\Microsoft\.NETFramework\v4.0.30319" -Name "SchUseStrongCrypto" -Type "DWORD" -Value 1 -Force
     Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\.NETFramework\v4.0.30319" -Name "SchUseStrongCrypto" -Type "DWORD" -Value 1 -Force
@@ -424,13 +379,6 @@ if ($firewall -eq $true) {
 Write-Host "Checking Backgrounded Processes"; Get-Job
 
 Write-Host "Performing Group Policy Update"
-$timeoutSeconds = 180
-$gpupdateJob = Start-Job -ScriptBlock { Gpupdate /force }
-$gpupdateResult = Receive-Job -Job $gpupdateJob -Wait -Timeout $timeoutSeconds
-if ($null -eq $gpupdateResult) {
-    Write-Host "Group Policy Update timed out after $timeoutSeconds seconds."
-} else {
-    Write-Host "Group Policy Update completed."
-}
-
+$process = Start-Process -FilePath "gpupdate.exe" -ArgumentList "/force" -PassThru
+$process.WaitForExit()  # Waits until gpupdate finishes
 Write-Warning "A reboot is required for all changes to take effect"
