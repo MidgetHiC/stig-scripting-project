@@ -63,8 +63,7 @@ The project structure is designed to keep the main execution logic simple while 
 | File/Folder | Description |
 | :--- | :--- |
 | `secure-standalone.ps1` | **The main execution script.** |
-| `Scripts/` | Contains modular PowerShell scripts for individual STIG configurations. |
-| `Policies/` | Typically holds supporting policy files (e.g., Group Policy templates, audit policies). |
+| `Files/` | Contains required GPOS, auditing configuration, and LGOP executable and documentation for script execution. |
 | `README.md` | This document. |
 
 -----
