@@ -1,93 +1,79 @@
-# STIG scripting project
+# Windows 10 & 11 STIG Automation Tool ⚙️
 
+This is a **PowerShell-based STIG (Security Technical Implementation Guide) automation tool** designed to enhance the security and compliance of standalone Windows 10 and Windows 11 systems. This script automatically applies numerous configuration changes to meet Department of Defense (DoD) STIG/SRG requirements and hardened security baselines.
 
+-----
 
-## Getting started
+## ⚠️ Warning and Disclaimer
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+**SECURITY SCRIPTS MAKE SYSTEM CHANGES\!**
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+This script makes extensive modifications to your operating system's configuration. It is intended for use in environments where STIG compliance is required.
 
-## Add your files
+  * **Review and Test:** You **must** review the script contents and thoroughly test the automation in a non-production environment before running it on any critical system.
+  * **Backup:** Create a full system backup or restore point before execution.
+  * **Standalone Systems:** This script is primarily designed for **standalone** systems not managed by Group Policy Objects (GPO) or other domain-level management tools.
+  * **Non-100% Compliance:** While this tool automates a vast majority of configuration changes, achieving 100% compliance may still require manual documentation and system-specific administrative tasks.
 
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
+-----
 
-```
-cd existing_repo
-git remote add origin https://gitlab.gtri.gatech.edu/mbello7/stig-scripting-project.git
-git branch -M main
-git push -uf origin main
-```
+## Prerequisites
 
-## Integrate with your tools
+  * **Operating System:** Windows 10 or Windows 11 (Enterprise or Professional editions are generally required for full STIG compliance).
+  * **Privileges:** The script must be run with **Administrator privileges**.
+  * **PowerShell:** PowerShell 5.1 or newer.
+  * **Pre-execution:** It is highly recommended to have the system fully updated and **BitLocker suspended** or disabled before the first run.
 
-- [ ] [Set up project integrations](https://gitlab.gtri.gatech.edu/mbello7/stig-scripting-project/-/settings/integrations)
-
-## Collaborate with your team
-
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
-
-## Test and Deploy
-
-Use the built-in continuous integration in GitLab.
-
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
-
-***
-
-# Editing this README
-
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
-
-## Suggestions for a good README
-
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
-
-## Name
-Choose a self-explaining name for your project.
-
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
-
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
-
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
-
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+-----
 
 ## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+The main automation script is named `secure-standalone.ps1`. All supporting files from this repository must be present in the same directory as the script when executed.
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+### 1\. Execute with Default Parameters
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+Running the script without any parameters will apply all available STIG configurations (most parameters default to `$true`).
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+```powershell
+.\secure-standalone.ps1
+```
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+### 2\. Custom Execution
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+The script typically supports parameters to selectively enable or disable certain STIG/application configurations (e.g., specific browsers, applications, or components).
 
-## License
-For open source projects, say how it is licensed.
+**Example: Run the script but skip the STIG for Microsoft Edge:**
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+```powershell
+.\secure-standalone.ps1 -Edge $false
+```
+
+**Example: Run the script but skip STIG configuration for both Firefox and Chrome:**
+
+```powershell
+.\secure-standalone.ps1 -Firefox $false -Chrome $false
+```
+
+-----
+
+## 💡 File Structure
+
+The project structure is designed to keep the main execution logic simple while modularizing the STIG implementation. The main script must be run from the root directory.
+
+| File/Folder | Description |
+| :--- | :--- |
+| `secure-standalone.ps1` | **The main execution script.** |
+| `Scripts/` | Contains modular PowerShell scripts for individual STIG configurations. |
+| `Policies/` | Typically holds supporting policy files (e.g., Group Policy templates, audit policies). |
+| `README.md` | This document. |
+
+-----
+
+## Attribution and Reference
+
+A significant portion of the logic and code is derived from the work in the following repository. This tool exists as a derivative work to implement similar STIG hardening concepts.
+
+**Reference Repository:**
+`https://github.com/simeononsecurity/Standalone-Windows-STIG-Script`
+
+-----
