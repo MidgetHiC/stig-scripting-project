@@ -74,6 +74,5 @@ A significant portion of the logic and code is derived from the work in the foll
 
 **Reference Repository:**
 `https://github.com/simeononsecurity/Standalone-Windows-STIG-Script`
-test
 
 -----
