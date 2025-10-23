@@ -42,16 +42,16 @@ Running the script without any parameters will apply all available STIG configur
 
 The script typically supports parameters to selectively enable or disable certain STIG/application configurations (e.g., specific browsers, applications, or components).
 
-**Example: Run the script but skip the STIG for Microsoft Edge:**
+**Example: Run the script but skip the STIG for Microsoft Defender:**
 
 ```powershell
-.\secure-standalone.ps1 -Edge $false
+.\secure-standalone.ps1 -defender $false
 ```
 
-**Example: Run the script but skip STIG configuration for both Firefox and Chrome:**
+**Example: Run the script but skip STIG configuration for both Windows Firewall and Chrome:**
 
 ```powershell
-.\secure-standalone.ps1 -Firefox $false -Chrome $false
+.\secure-standalone.ps1 -firewall $false -chrome $false
 ```
 
 -----
@@ -71,7 +71,7 @@ The project structure is designed to keep the main execution logic simple while 
 
 ## Attribution and Reference
 
-A significant portion of the logic and code is derived from the work in the following repository. This tool exists as a derivative work to implement similar STIG hardening concepts.
+A significant portion of the logic and code is derived from the work in the following repository. This tool is an updated, derivative work designed to implement similar STIG hardening concepts.
 
 **Reference Repository:**
 `https://github.com/simeononsecurity/Standalone-Windows-STIG-Script`
